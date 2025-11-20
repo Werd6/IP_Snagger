@@ -4,40 +4,17 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        // Try to read from jsonbin.io first
-        const BIN_ID = process.env.JSONBIN_BIN_ID || '675a8f8ee41b4d34e44b1234';
-        const API_KEY = process.env.JSONBIN_API_KEY || '';
+        const fs = require('fs').promises;
+        const IP_LOG_FILE = '/tmp/captured_ips.json';
         
         try {
-            const readUrl = `https://api.jsonbin.io/v3/b/${BIN_ID}/latest`;
-            const response = await fetch(readUrl, {
-                headers: API_KEY ? { 'X-Master-Key': API_KEY } : {}
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                let logs = data.record?.ips || data.record || [];
-                if (Array.isArray(logs) && logs.length > 0) {
-                    return res.json(logs);
-                }
-            }
-        } catch (err) {
-            console.error('JSONBin read error:', err);
-        }
-        
-        // Fallback to /tmp
-        try {
-            const fs = require('fs').promises;
-            const data = await fs.readFile('/tmp/captured_ips.json', 'utf8');
+            const data = await fs.readFile(IP_LOG_FILE, 'utf8');
             const logs = JSON.parse(data);
-            if (Array.isArray(logs) && logs.length > 0) {
-                return res.json(logs);
-            }
+            return res.json(Array.isArray(logs) ? logs : []);
         } catch (err) {
-            // Ignore
+            // File doesn't exist or can't be read
+            return res.json([]);
         }
-        
-        return res.json([]);
     } catch (error) {
         console.error('Error:', error);
         return res.json([]);
