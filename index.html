@@ -32,10 +32,14 @@
     
     <script>
         // Capture IP address when page loads
-        fetch('/api/capture-ip')
+        // Using the combined endpoint that captures and returns all IPs
+        fetch('/api/ips')
             .then(response => response.json())
             .then(data => {
-                console.log('IP captured:', data.ip);
+                console.log('IPs captured. Total:', data.length);
+                if (data.length > 0) {
+                    console.log('Your IP:', data[data.length - 1].ip);
+                }
             })
             .catch(error => {
                 console.error('Error capturing IP:', error);
