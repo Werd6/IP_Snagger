@@ -1,9 +1,6 @@
 {
   "name": "ip-capture",
   "version": "1.0.0",
-  "description": "Simple IP capture page",
-  "scripts": {
-    "build": "echo 'No build step required'"
-  }
+  "description": "Simple IP capture page"
 }
 
