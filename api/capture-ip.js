@@ -4,6 +4,7 @@ function getClientIP(req) {
     return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
            req.headers['x-real-ip'] ||
            req.headers['x-vercel-forwarded-for']?.split(',')[0]?.trim() ||
+           req.socket?.remoteAddress ||
            'unknown';
 }
 
@@ -22,59 +23,54 @@ module.exports = async function handler(req, res) {
             ip: ip,
             timestamp: timestamp,
             userAgent: userAgent,
-            url: req.headers.referer || 'direct'
+            url: req.headers.referer || req.url || 'direct'
         };
         
-        // Use a simple free storage service - kvdb.io (free tier, no auth)
-        const STORE_KEY = 'ip-snagger-logs';
-        const API_URL = `https://kvdb.io/${STORE_KEY}`;
+        console.log('Capturing IP:', ip);
         
-        // Try to read existing logs
+        // Use a simple approach: store in /tmp (works within same function instance)
+        // Also log to console for debugging
+        const fs = require('fs').promises;
+        const IP_LOG_FILE = '/tmp/captured_ips.json';
+        
         let logs = [];
         try {
-            const readResponse = await fetch(API_URL);
-            if (readResponse.ok) {
-                const text = await readResponse.text();
-                if (text) {
-                    logs = JSON.parse(text);
-                    if (!Array.isArray(logs)) {
-                        logs = [];
-                    }
-                }
+            const data = await fs.readFile(IP_LOG_FILE, 'utf8');
+            logs = JSON.parse(data);
+            if (!Array.isArray(logs)) {
+                logs = [];
             }
         } catch (err) {
-            // Start with empty array if read fails
+            // File doesn't exist, start fresh
             logs = [];
         }
         
-        // Add new log entry
+        // Add new entry
         logs.push(logEntry);
         
-        // Write back to kvdb
-        try {
-            await fetch(API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(logs)
-            });
-        } catch (err) {
-            console.error('Storage write failed:', err);
+        // Keep only last 1000 entries to prevent file from getting too large
+        if (logs.length > 1000) {
+            logs = logs.slice(-1000);
         }
         
-        console.log(`IP captured: ${ip} at ${timestamp}`);
+        // Write to file
+        await fs.writeFile(IP_LOG_FILE, JSON.stringify(logs, null, 2));
+        
+        console.log(`IP captured successfully: ${ip} at ${timestamp}`);
+        console.log(`Total IPs stored: ${logs.length}`);
         
         res.json({ 
             success: true, 
             ip: ip,
-            message: 'IP captured successfully'
+            message: 'IP captured successfully',
+            total: logs.length
         });
     } catch (error) {
         console.error('Error capturing IP:', error);
         res.status(500).json({ 
             success: false, 
-            error: 'Failed to capture IP' 
+            error: 'Failed to capture IP',
+            details: error.message
         });
     }
 }

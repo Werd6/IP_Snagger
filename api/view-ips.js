@@ -5,28 +5,36 @@ module.exports = async function handler(req, res) {
     }
 
     try {
-        // Read from kvdb.io
-        const STORE_KEY = 'ip-snagger-logs';
-        const API_URL = `https://kvdb.io/${STORE_KEY}`;
+        const fs = require('fs').promises;
+        const IP_LOG_FILE = '/tmp/captured_ips.json';
         
         try {
-            const response = await fetch(API_URL);
-            if (response.ok) {
-                const text = await response.text();
-                if (text) {
-                    const logs = JSON.parse(text);
-                    if (Array.isArray(logs)) {
-                        return res.json(logs);
-                    }
-                }
+            const data = await fs.readFile(IP_LOG_FILE, 'utf8');
+            const logs = JSON.parse(data);
+            
+            if (Array.isArray(logs)) {
+                console.log(`Returning ${logs.length} IP entries`);
+                return res.json(logs);
+            } else {
+                console.log('Logs file exists but is not an array');
+                return res.json([]);
             }
         } catch (err) {
-            console.error('Storage read failed:', err);
+            if (err.code === 'ENOENT') {
+                console.log('No IP log file found yet');
+                return res.json([]);
+            }
+            console.error('Error reading IP log file:', err);
+            return res.status(500).json({ 
+                error: 'Failed to read IP logs',
+                details: err.message 
+            });
         }
-        
-        // Fallback to empty array
-        res.json([]);
     } catch (error) {
-        res.status(500).json({ error: 'Failed to read IP logs' });
+        console.error('Unexpected error:', error);
+        res.status(500).json({ 
+            error: 'Failed to read IP logs',
+            details: error.message 
+        });
     }
 }
