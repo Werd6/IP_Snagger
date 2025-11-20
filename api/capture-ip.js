@@ -1,5 +1,3 @@
-const fs = require('fs').promises;
-
 // Function to get real IP address (handles proxies and Vercel)
 function getClientIP(req) {
     // Vercel provides IP in x-forwarded-for header
@@ -27,25 +25,43 @@ module.exports = async function handler(req, res) {
             url: req.headers.referer || 'direct'
         };
         
-        // Use /tmp directory for file storage (works in Vercel serverless functions)
-        // Note: Files in /tmp are ephemeral and reset on each deployment
-        const IP_LOG_FILE = '/tmp/captured_ips.json';
+        // Use a simple free storage service - kvdb.io (free tier, no auth)
+        const STORE_KEY = 'ip-snagger-logs';
+        const API_URL = `https://kvdb.io/${STORE_KEY}`;
         
-        // Read existing logs
+        // Try to read existing logs
         let logs = [];
         try {
-            const data = await fs.readFile(IP_LOG_FILE, 'utf8');
-            logs = JSON.parse(data);
+            const readResponse = await fetch(API_URL);
+            if (readResponse.ok) {
+                const text = await readResponse.text();
+                if (text) {
+                    logs = JSON.parse(text);
+                    if (!Array.isArray(logs)) {
+                        logs = [];
+                    }
+                }
+            }
         } catch (err) {
-            // File doesn't exist yet, start with empty array
+            // Start with empty array if read fails
             logs = [];
         }
         
         // Add new log entry
         logs.push(logEntry);
         
-        // Write back to file
-        await fs.writeFile(IP_LOG_FILE, JSON.stringify(logs, null, 2));
+        // Write back to kvdb
+        try {
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(logs)
+            });
+        } catch (err) {
+            console.error('Storage write failed:', err);
+        }
         
         console.log(`IP captured: ${ip} at ${timestamp}`);
         
@@ -62,4 +78,3 @@ module.exports = async function handler(req, res) {
         });
     }
 }
-
